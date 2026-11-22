@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ps5-AIO ESP 一键烧录 V2</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background: #f5f7fa;
+      margin: 0;
+      padding: 20px 20px 64px;
+      color: #333;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+
+    /* ===== 页头 ===== */
+    .page-header {
+      background: #fff;
+      border-radius: 12px;
+      padding: 18px 28px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      margin-bottom: 16px;
+    }
+    .page-header h1 { font-size: 22px; margin: 0 0 6px; }
+    .build-info {
+      font-size: 12px;
+      color: #94a3b8;
+      margin: 0;
+      line-height: 1.6;
+      word-break: break-all;
+    }
+    .build-info .sha {
+      color: #667eea; font-weight: 600;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+    }
+    .build-info .msg { color: #64748b; }
+
+    /* ===== 横向双栏 ===== */
+    .layout {
+      display: grid;
+      grid-template-columns: 420px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+    .panel-left { position: sticky; top: 16px; }
+    @media (max-width: 900px) { .panel-left { position: static; } }
+    .panel-right h2 { font-size: 17px; margin: 0 0 8px; }
+
+    .hint { color: #666; font-size: 14px; margin-top: 0; line-height: 1.6; }
+    .hint code {
+      background: rgba(0,0,0,0.06);
+      padding: 1px 5px; border-radius: 3px; font-size: 13px;
+    }
+    .warning {
+      background: #fff8e1;
+      border-left: 4px solid #f0ad4e;
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: #8a6d3b;
+      line-height: 1.6;
+      margin: 12px 0;
+    }
+    .flash-btn {
+      width: 100%;
+      padding: 16px;
+      font-size: 17px;
+      font-weight: 600;
+      color: #fff;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin: 8px 0;
+    }
+    .flash-btn:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(102,126,234,0.4);
+    }
+    .flash-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+    /* ===== 步骤 / 进度 ===== */
+    .status-panel { margin-top: 16px; }
+    #steps { list-style: none; padding: 0; margin: 0 0 12px 0; }
+    .step {
+      display: flex; align-items: center;
+      padding: 8px 10px;
+      border-radius: 8px; margin-bottom: 4px;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .step .icon {
+      width: 22px; height: 22px;
+      display: flex; align-items: center; justify-content: center;
+      margin-right: 10px; font-weight: bold; flex-shrink: 0;
+    }
+    .step .label { flex: 1; }
+    .step .detail { color: #888; font-size: 12px; margin-left: 8px; }
+
+    .step.pending { color: #aaa; }
+    .step.pending .icon { color: #ccc; }
+    .step.active { background: #eef2ff; color: #4c51bf; font-weight: 600; }
+    .step.done { color: #38a169; }
+    .step.done .icon { color: #38a169; }
+    .step.error { background: #fef2f2; color: #e53e3e; }
+    .step.error .icon { color: #e53e3e; }
+
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid #c7d2fe; border-top-color: #4c51bf;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .progress-bar {
+      width: 100%; height: 12px;
+      background: #e2e8f0; border-radius: 6px;
+      overflow: hidden; margin: 8px 0;
+    }
+    #progress-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #667eea, #764ba2);
+      border-radius: 6px;
+      transition: width 0.15s ease-out;
+    }
+    #progress-text {
+      text-align: center; font-size: 13px; color: #666;
+      margin-bottom: 10px; font-variant-numeric: tabular-nums;
+    }
+    .success {
+      background: #f0fff4; border: 1px solid #9ae6b4; color: #276749;
+      padding: 12px 14px; border-radius: 8px; margin-top: 10px;
+      font-size: 14px; line-height: 1.6;
+    }
+    .error {
+      background: #fff5f5; border: 1px solid #feb2b2; color: #c53030;
+      padding: 12px 14px; border-radius: 8px; margin-top: 10px;
+      word-break: break-word; font-size: 14px; line-height: 1.6;
+    }
+
+    /* ===== 芯片列表 ===== */
+    .chip-list { display: flex; flex-direction: column; gap: 6px; }
+    .chip-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px; background: #f8fafc;
+      border: 1px solid #e2e8f0; border-radius: 8px;
+    }
+    .chip-name { font-weight: 600; color: #4c51bf; font-size: 14px; }
+    .chip-flash { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .tag {
+      padding: 4px 12px; background: #eef2ff; color: #4c51bf;
+      border-radius: 12px; font-size: 12px; font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      text-decoration: none;
+      display: inline-block;
+      transition: all 0.2s;
+      cursor: pointer;
+      user-select: none;
+    }
+    .tag:hover, .tag.active {
+      background: #c7d2fe; color: #3730a3;
+      box-shadow: 0 2px 8px rgba(102,126,234,0.3);
+      transform: translateY(-1px);
+    }
+
+    /* ===== Payload 清单（常驻） ===== */
+    .payload-overview {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px dashed #e2e8f0;
+    }
+    .payload-overview-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #334155;
+      margin: 0 0 4px;
+    }
+    .payload-overview-tip {
+      font-size: 12px;
+      color: #94a3b8;
+      margin: 0 0 12px;
+      line-height: 1.6;
+    }
+    .payload-tier {
+      display: flex; align-items: flex-start; gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px dashed #eef2f7;
+    }
+    .payload-tier:last-child { border-bottom: none; }
+    .payload-tier-name {
+      flex-shrink: 0;
+      min-width: 46px;
+      text-align: center;
+      font-weight: 700;
+      color: #4c51bf;
+      font-size: 12px;
+      padding: 3px 8px;
+      background: #eef2ff;
+      border-radius: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+    .payload-tier-content {
+      flex: 1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      align-items: center;
+      font-size: 11px;
+    }
+    .payload-tier-label {
+      display: inline-block;
+      font-size: 11px;
+      color: #475569;
+      background: #f1f5f9;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .payload-tier-label.base {
+      color: #4c51bf;
+      background: #eef2ff;
+    }
+    .payload-tier-label.builtin {
+      color: #b45309;
+      background: #fef3c7;
+    }
+    .payload-item {
+      background: #f1f5f9;
+      color: #475569;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 11px;
+      word-break: break-all;
+    }
+    .payload-item.builtin {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .payload-empty {
+      color: #94a3b8;
+      font-size: 11px;
+      font-style: italic;
+    }
+
+    .empty { color: #94a3b8; font-size: 13px; padding: 16px 0; text-align: center; }
+
+    /* ===== URL 浮窗 ===== */
+    .url-popover {
+      position: fixed;
+      z-index: 9999;
+      min-width: 320px;
+      max-width: 440px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px;
+      box-shadow: 0 10px 32px rgba(0,0,0,0.18);
+      font-size: 14px;
+    }
+    .popover-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px;
+    }
+    .popover-size { font-weight: 700; color: #4c51bf; font-size: 14px; }
+    .popover-url {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 8px 10px;
+      border-radius: 6px;
+      font-family: ui-monospace, Menlo, Consolas, monospace;
+      font-size: 11.5px;
+      color: #334155;
+      word-break: break-all;
+      margin-bottom: 10px;
+      max-height: 72px;
+      overflow-y: auto;
+      user-select: all;
+    }
+    .popover-actions {
+      display: flex; gap: 8px;
+    }
+    .popover-actions button, .popover-actions a {
+      flex: 1;
+      text-align: center;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: none;
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+    .copy-btn { background: #eef2ff; color: #4c51bf; }
+    .copy-btn:hover { background: #c7d2fe; }
+    .download-btn {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: #fff;
+    }
+    .download-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 3px 10px rgba(102,126,234,0.4);
+    }
+
+    /* ===== 页脚 ===== */
+    .page-footer {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      height: 3vh; min-height: 36px;
+      z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      gap: 6px;
+      padding: 0 16px;
+      text-align: center;
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      color: #64748b;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-top: 1px solid #e2e8f0;
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
+    }
+    .page-footer .heart { color: #e53e3e; }
+    .page-footer .name {
+      font-weight: 600;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: #4c51bf;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="page-header">
+      <h1>Ps5-AIO ESP 一键烧录V2</h1>
+      <div id="build-info" class="build-info">版本加载中…</div>
+    </header>
+
+    <div class="layout">
+      <!-- 左侧：烧录操作 / 状态 -->
+      <aside class="panel panel-left">
+        <p class="hint">自动识别芯片型号 与 Flash 大小，加载对应固件并烧录到 <code>0x0</code>。</p>
+        <p class="warning">
+          ⚠️ 烧录前将<b>全片擦除</b> Flash，设备上原有数据将被清除。<br>
+          若设备 Flash 较大（如 32MB）但无精确档位固件，会自动降档使用较小 Flash 的固件（32→16→8→4MB）。可用容量会受限，但功能正常；<b>小 Flash 设备不会刷入大固件</b>。
+        </p>
+
+        <button id="flash-btn" class="flash-btn">🔌 一键烧录(无需下载固件)</button>
+
+        <div id="status-panel" class="status-panel" style="display:none;">
+          <ol id="steps"></ol>
+          <div id="progress-wrap" style="display:none;">
+            <div class="progress-bar"><div id="progress-fill"></div></div>
+            <div id="progress-text">0%</div>
+          </div>
+          <div id="result"></div>
+        </div>
+      </aside>
+
+      <!-- 右侧：芯片列表 + Payload 清单 -->
+      <main class="panel panel-right">
+        <h2>🎯 支持的芯片型号</h2>
+        <p class="hint">点击容量可下载对应固件；<b>悬停 / 点击</b> 容量标签会弹出浮窗，可查看完整 URL、复制 URL 或直接下载。</p>
+        <div id="chip-list">加载中…</div>
+
+        <section class="payload-overview">
+          <h3 class="payload-overview-title">📦 Payload 清单</h3>
+          <p class="payload-overview-tip">
+            每档 Flash 在上档基础上累加 Payload；括号内为固件内置、每档都包含的基础模块。
+          </p>
+          <div id="payload-overview"></div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- URL 浮窗 -->
+  <div id="url-popover" class="url-popover" style="display:none;">
+    <div class="popover-header">
+      <span class="popover-size"></span>
+    </div>
+    <div class="popover-url"></div>
+    <div class="popover-actions">
+      <button class="copy-btn" type="button">📋 复制 URL</button>
+      <a class="download-btn" download>⬇ 下载</a>
+    </div>
+  </div>
+
+  <footer class="page-footer">
+    <span class="heart">❤</span>
+    <span>感谢 <span class="name">微脉电玩</span> 长期协助测试</span>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/web-serial-polyfill@latest/dist/web-serial-polyfill.umd.min.js"></script>
+  <script type="module">
+    import { ESPLoader, Transport, WebUSBSerialPort } from 'https://cdn.jsdelivr.net/npm/esptool-js@0.7.0/bundle.js';
+
+    const flashBtn    = document.getElementById('flash-btn');
+    const statusPanel = document.getElementById('status-panel');
+    const stepsEl     = document.getElementById('steps');
+    const progressWrap= document.getElementById('progress-wrap');
+    const progressFill= document.getElementById('progress-fill');
+    const progressText= document.getElementById('progress-text');
+    const resultEl    = document.getElementById('result');
+
+    // ===== 版本信息 =====
+    (function renderBuildInfo() {
+      const el = document.getElementById('build-info');
+      const b = window.BUILD_INFO;
+      if (!el) return;
+      if (!b) { el.textContent = '版本信息不可用'; return; }
+      const esc = s => String(s ?? '').replace(/[&<>"']/g,
+        c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+      el.innerHTML =
+        `版本 <span class="sha">${esc(b.sha)}</span> · ${esc(b.time)}<br>` +
+        `<span class="msg" title="${esc(b.message)}">${esc(b.message)}</span>`;
+    })();
+
+    // ===== 通用转义 =====
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g,
+        c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+    }
+
+    // ===== 芯片列表渲染 =====
+    function renderChipList() {
+      const el = document.getElementById('chip-list');
+      if (!el) return;
+      const data = window.CHIP_DATA;
+      if (!data || !Array.isArray(data.chips) || data.chips.length === 0) {
+        el.innerHTML = '<div class="empty">芯片数据加载失败，请刷新页面重试</div>';
+        return;
+      }
+      const rows = data.chips.map(chip => {
+        const tags = chip.items.map(item =>
+          `<a class="tag" href="firmware/${escapeHtml(item.base)}.bin" download
+              data-flash="${escapeHtml(item.flash)}"
+              data-base="${escapeHtml(item.base)}">${escapeHtml(item.flash.toUpperCase())}</a>`
+        ).join('');
+        return `<div class="chip-row">
+                  <span class="chip-name">${escapeHtml(chip.label)}</span>
+                  <span class="chip-flash">${tags}</span>
+                </div>`;
+      }).join('');
+      el.innerHTML = `<div class="chip-list">${rows}</div>`;
+    }
+
+    // ===== Payload 清单渲染（常驻，基于上一档展示增量）=====
+    const BUILTIN_PAYLOADS = [
+      'autoldr-ps5.elf', 'kexp.bin', 'pldmgr.elf',
+      'update_blocker.elf', 'yb_installer.elf',
+      'OffactAutofill.elf', 'y2jb-helper.elf',
+    ];
+
+    function renderPayloadOverview() {
+      const el = document.getElementById('payload-overview');
+      if (!el) return;
+
+      const payloads = window.CHIP_DATA && window.CHIP_DATA.payloads;
+      if (!payloads) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+
+      const TIER_ORDER = ['4mb', '8mb', '16mb', '32mb'];
+      const presentTiers = TIER_ORDER.filter(t => Array.isArray(payloads[t]));
+      if (presentTiers.length === 0) { el.innerHTML = '<div class="empty">暂无数据</div>'; return; }
+
+      const itemHtml   = p => `<span class="payload-item">${escapeHtml(p)}</span>`;
+      const builtinHtml= p => `<span class="payload-item builtin">${escapeHtml(p)}</span>`;
+
+      const rows = presentTiers.map((t, i) => {
+        const tierUpper = t.toUpperCase();
+        const curr = payloads[t] || [];
+        const tierName = `<span class="payload-tier-name">${tierUpper}</span>`;
+
+        // 第一档：基础 payload + 内置
+        if (i === 0) {
+          const extra = curr.length
+            ? curr.map(itemHtml).join('')
+            : '<span class="payload-empty">（无额外 payload）</span>';
+          const builtin = BUILTIN_PAYLOADS.map(builtinHtml).join('');
+          return `<div class="payload-tier">
+                    ${tierName}
+                    <span class="payload-tier-content">
+                      <span class="payload-tier-label base">基础</span>
+                      ${extra}
+                      <span class="payload-tier-label builtin">内置</span>
+                      ${builtin}
+                    </span>
+                  </div>`;
+        }
+
+        // 后续档：相对上一档的增量
+        const prevTier  = presentTiers[i - 1];
+        const prevUpper = prevTier.toUpperCase();
+        const prevSet   = new Set(payloads[prevTier] || []);
+        const delta     = curr.filter(p => !prevSet.has(p));
+        const deltaHtml = delta.length
+          ? delta.map(itemHtml).join('')
+          : '<span class="payload-empty">（无额外 payload）</span>';
+        return `<div class="payload-tier">
+                  ${tierName}
+                  <span class="payload-tier-content">
+                    <span class="payload-tier-label">基于 ${prevUpper}</span>
+                    ${deltaHtml}
+                  </span>
+                </div>`;
+      });
+
+      el.innerHTML = rows.join('');
+    }
+
+    renderChipList();
+    renderPayloadOverview();
+
+    // ===== URL 浮窗逻辑 =====
+    const popover = document.getElementById('url-popover');
+    const chipListEl = document.getElementById('chip-list');
+    let activeTag = null;
+    let hideTimer = null;
+
+    function scheduleHide() {
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        popover.style.display = 'none';
+        if (activeTag) activeTag.classList.remove('active');
+        activeTag = null;
+      }, 180);
+    }
+    function cancelHide() { clearTimeout(hideTimer); }
+
+    function showPopover(tag) {
+      const flash = tag.dataset.flash || '';
+      const base  = tag.dataset.base  || '';
+      const relUrl = `firmware/${base}.bin`;
+      let absUrl;
+      try { absUrl = new URL(relUrl, location.href).href; } catch (_) { absUrl = relUrl; }
+
+      popover.querySelector('.popover-size').textContent = flash.toUpperCase() + ' 固件';
+      popover.querySelector('.popover-url').textContent = absUrl;
+
+      const dlBtn = popover.querySelector('.download-btn');
+      dlBtn.href = relUrl;
+      dlBtn.setAttribute('download', `${base}.bin`);
+
+      if (activeTag && activeTag !== tag) activeTag.classList.remove('active');
+      activeTag = tag;
+      tag.classList.add('active');
+
+      popover.style.display = 'block';
+      popover.style.visibility = 'hidden';
+
+      const rect = tag.getBoundingClientRect();
+      const pw = popover.offsetWidth;
+      const ph = popover.offsetHeight;
+
+      let left = rect.left + rect.width / 2 - pw / 2;
+      let top  = rect.bottom + 8;
+      if (left < 8) left = 8;
+      if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+      if (top + ph > window.innerHeight - 8) {
+        top = rect.top - ph - 8;
+        if (top < 8) top = 8;
+      }
+      popover.style.left = left + 'px';
+      popover.style.top  = top  + 'px';
+      popover.style.visibility = '';
+    }
+
+    chipListEl.addEventListener('mouseover', (e) => {
+      const tag = e.target.closest('.tag');
+      if (!tag) return;
+      cancelHide();
+      if (tag !== activeTag) showPopover(tag);
+    });
+    chipListEl.addEventListener('mouseout', (e) => {
+      const tag = e.target.closest('.tag');
+      if (!tag) return;
+      const to = e.relatedTarget;
+      if (to && to.closest && to.closest('.url-popover')) return;
+      scheduleHide();
+    });
+
+    chipListEl.addEventListener('click', (e) => {
+      const tag = e.target.closest('.tag');
+      if (!tag) return;
+      e.preventDefault();
+      if (activeTag === tag && popover.style.display === 'block') {
+        popover.style.display = 'none';
+        tag.classList.remove('active');
+        activeTag = null;
+      } else {
+        showPopover(tag);
+      }
+    });
+
+    popover.addEventListener('mouseenter', cancelHide);
+    popover.addEventListener('mouseleave', scheduleHide);
+
+    document.addEventListener('scroll', () => {
+      if (popover.style.display === 'block') {
+        popover.style.display = 'none';
+        if (activeTag) activeTag.classList.remove('active');
+        activeTag = null;
+      }
+    }, true);
+    window.addEventListener('resize', () => {
+      if (popover.style.display === 'block') {
+        popover.style.display = 'none';
+        if (activeTag) activeTag.classList.remove('active');
+        activeTag = null;
+      }
+    });
+
+    popover.querySelector('.copy-btn').addEventListener('click', async () => {
+      const btn  = popover.querySelector('.copy-btn');
+      const text = popover.querySelector('.popover-url').textContent;
+      const orig = btn.textContent;
+      let ok = false;
+
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          ok = true;
+        }
+      } catch (_) { /* fallthrough */ }
+
+      if (!ok) {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = text;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          ok = true;
+        } catch (_) { /* ignore */ }
+      }
+
+      btn.textContent = ok ? '✅ 已复制' : '❌ 复制失败';
+      setTimeout(() => { btn.textContent = orig; }, 1500);
+    });
+
+    // ===== 烧录步骤 =====
+    const STEP_DEFS = [
+      { id: 'connect',      label: '连接设备' },
+      { id: 'identify',     label: '识别芯片型号' },
+      { id: 'detect_flash', label: '检测 Flash 大小' },
+      { id: 'download',     label: '下载固件' },
+      { id: 'erase',        label: '擦除 Flash（全片擦除）' },
+      { id: 'write',        label: '写入固件' },
+      { id: 'reset',        label: '复位设备' },
+    ];
+
+    let currentStepId = null;
+
+    function renderSteps() {
+      stepsEl.innerHTML = STEP_DEFS.map(s =>
+        `<li id="step-${s.id}" class="step pending">
+           <span class="icon">○</span>
+           <span class="label">${s.label}</span>
+           <span class="detail"></span>
+         </li>`
+      ).join('');
+    }
+
+    function setStep(id, state, detail = '') {
+      const li = document.getElementById(`step-${id}`);
+      if (!li) return;
+      if (state === 'active') currentStepId = id;
+      li.className = `step ${state}`;
+
+      const icon = li.querySelector('.icon');
+      if (state === 'pending')      icon.textContent = '○';
+      else if (state === 'active')  icon.innerHTML = '<span class="spinner"></span>';
+      else if (state === 'done')    icon.textContent = '✓';
+      else if (state === 'error')   icon.textContent = '✗';
+
+      li.querySelector('.detail').textContent = detail;
+    }
+
+    function resolveFirmwarePrefix(rawChipName) {
+      const raw = (rawChipName || '').trim();
+      if (!raw) return '';
+
+      if (/S3[-_ ]?PICO/i.test(raw)) return 'esp32-s3';
+      if (/PICO/i.test(raw)) return 'esp32-old';
+      if (/^ESP32$/i.test(raw)) return 'esp32-old';
+
+      const hyphenMatch = raw.match(/ESP32-[A-Z0-9]+/i);
+      if (hyphenMatch) return hyphenMatch[0].toLowerCase();
+
+      const compactMatch = raw.match(/ESP32([A-Z0-9]+)/i);
+      if (compactMatch) return `esp32-${compactMatch[1].toLowerCase()}`;
+
+      return '';
+    }
+
+    function buildFlashCandidates(detectedFlashSize) {
+      const match = String(detectedFlashSize || '').match(/(\d+)\s*MB/i);
+      const detectedMB = match ? parseInt(match[1], 10) : 4;
+
+      const STANDARD = [64, 32, 16, 8, 4, 2];
+      const smaller = STANDARD.filter(s => s < detectedMB);
+      const list = [detectedMB, ...smaller];
+
+      return [...new Set(list)].map(s => `${s}mb`);
+    }
+
+    async function connectSerial() {
+      const errors = [];
+
+      if (navigator.serial && navigator.serial.requestPort) {
+        try {
+          const port = await navigator.serial.requestPort();
+          if (port) return { port, type: 'Native Web Serial' };
+        } catch (e) {
+          errors.push(`原生 Web Serial: ${e.message}`);
+        }
+      }
+
+      if (WebUSBSerialPort && WebUSBSerialPort.requestPort) {
+        try {
+          const usbPort = await WebUSBSerialPort.requestPort();
+          if (usbPort) {
+            return { port: usbPort.asSerialPort(), type: 'CH340 WebUSB' };
+          }
+        } catch (e) {
+          errors.push(`CH340 WebUSB: ${e.message}`);
+        }
+      }
+
+      const SerialPolyfill = window.WebSerialPolyfill;
+      if (SerialPolyfill && SerialPolyfill.requestPort) {
+        try {
+          const port = await SerialPolyfill.requestPort();
+          if (port) return { port, type: 'Web Serial Polyfill' };
+        } catch (e) {
+          errors.push(`Polyfill: ${e.message}`);
+        }
+      }
+
+      throw new Error(`未找到兼容的串口设备。尝试记录：\n${errors.join('\n')}`);
+    }
+
+    async function doFlash() {
+      if (!('serial' in navigator) && !window.WebSerialPolyfill) {
+        alert('当前浏览器不支持 Web Serial API，请使用桌面版 Chrome / Edge / Opera。');
+        return;
+      }
+      if (!window.isSecureContext) {
+        alert('请在 HTTPS 或 localhost 环境下使用本页面。');
+        return;
+      }
+
+      flashBtn.disabled = true;
+      flashBtn.textContent = '烧录中，请勿断开...';
+      statusPanel.style.display = 'block';
+      resultEl.textContent = '';
+      progressWrap.style.display = 'none';
+      progressFill.style.width = '0%';
+      progressText.textContent = '0%';
+      currentStepId = null;
+      renderSteps();
+
+      let loader = null;
+      let transport = null;
+      let firmwarePrefix = '';
+      let detectedFlashTag = '';
+      let usedFlashTag = '';
+      let downgraded = false;
+
+      try {
+        setStep('connect', 'active');
+        const { port, type } = await connectSerial();
+        setStep('connect', 'active', `已连接 (${type})`);
+        transport = new Transport(port, true);
+        loader = new ESPLoader({ transport, baudrate: 921600 });
+        await loader.main();
+        setStep('connect', 'done');
+
+        setStep('identify', 'active');
+        const rawChipName = loader.chip?.CHIP_NAME || loader.chipName || '';
+        firmwarePrefix = resolveFirmwarePrefix(rawChipName);
+
+        if (!firmwarePrefix) {
+          throw new Error(`无法识别芯片型号（原始返回: "${rawChipName}"）`);
+        }
+        setStep('identify', 'done', rawChipName || firmwarePrefix);
+
+        setStep('detect_flash', 'active');
+        let flashSize = await loader.detectFlashSize();
+        if (!flashSize) {
+          console.warn('Flash 大小检测失败，回退到 4MB');
+          flashSize = '4MB';
+        }
+        detectedFlashTag = flashSize.toLowerCase().replace(/\s+/g, '');
+        setStep('detect_flash', 'done', flashSize);
+
+        setStep('download', 'active', '尝试匹配…');
+        const candidates = buildFlashCandidates(flashSize);
+        const tried = [];
+        let firmwareData = null;
+
+        for (const tag of candidates) {
+          const fwFile = `${firmwarePrefix}-${tag}.bin`;
+          const fwUrl  = `firmware/${fwFile}`;
+          tried.push(tag);
+          setStep('download', 'active', `尝试 ${tag}…`);
+          try {
+            const resp = await fetch(fwUrl, { cache: 'no-cache' });
+            if (resp.ok) {
+              firmwareData = new Uint8Array(await resp.arrayBuffer());
+              usedFlashTag = tag;
+              break;
+            }
+          } catch (e) {
+            console.warn(`fetch ${fwUrl} 失败:`, e);
+          }
+        }
+
+        if (!firmwareData) {
+          throw new Error(
+            `未找到可用固件。已尝试：${tried.join('、')}\n` +
+            `请确认 firmware/ 目录下存在 ${firmwarePrefix}-*.bin。`
+          );
+        }
+
+        downgraded = usedFlashTag !== detectedFlashTag;
+        const downloadDetail = `${(firmwareData.length / 1024).toFixed(1)} KB` +
+          (downgraded ? `（降档 ${detectedFlashTag} → ${usedFlashTag}）` : '');
+        setStep('download', 'done', downloadDetail);
+
+        setStep('erase', 'active', '请稍候…');
+        let writeStarted = false;
+
+        await loader.writeFlash({
+          fileArray: [{ data: firmwareData, address: 0x0 }],
+          flashSize: 'keep',
+          eraseAll: true,
+          compress: true,
+          reportProgress: (fileIndex, written, total) => {
+            if (!writeStarted) {
+              writeStarted = true;
+              setStep('erase', 'done', '擦除完成');
+              currentStepId = 'write';
+              progressWrap.style.display = 'block';
+            }
+            const percent = Math.min(100, Math.round((written / total) * 100));
+            progressFill.style.width = percent + '%';
+            progressText.textContent = percent + '%';
+            setStep('write', 'active', percent + '%');
+          },
+        });
+
+        setStep('write', 'done', '100%');
+
+        setStep('reset', 'active');
+        try {
+          await loader.after('hard_reset');
+          setStep('reset', 'done');
+        } catch (e) {
+          console.warn('复位命令发送失败:', e);
+          setStep('reset', 'done', '（请手动复位）');
+        }
+
+        const usedFile = `${firmwarePrefix}-${usedFlashTag}.bin`;
+        const downgradeNote = downgraded
+          ? `<br><small style="color:#4a5568;">设备 Flash 为 ${detectedFlashTag}，已降档使用较小固件。</small>`
+          : '';
+        resultEl.innerHTML = `<div class="success">
+          ✅ 烧录完成！设备已复位，可以拔下。<br>
+          <small style="color:#4a5568;">使用固件：<code>${usedFile}</code></small>${downgradeNote}
+        </div>`;
+
+      } catch (err) {
+        console.error(err);
+        const msg = err?.message || String(err);
+        const cancelled = /No port selected|user cancelled|The user aborted|cancelled variant/i.test(msg);
+
+        if (currentStepId) {
+          setStep(currentStepId, cancelled ? 'pending' : 'error');
+        }
+        resultEl.innerHTML = cancelled
+          ? `<div class="error">已取消。</div>`
+          : `<div class="error">❌ 烧录失败：${msg.replace(/\n/g, '<br>')}</div>`;
+
+      } finally {
+        flashBtn.disabled = false;
+        flashBtn.textContent = '🔌 再次烧录';
+        try { if (transport) await transport.disconnect(); } catch (_) {}
+      }
+    }
+
+    flashBtn.addEventListener('click', doFlash);
+  </script>
+
+  <script src="firmware/build-info.js"></script>
+  <script src="firmware/chips.js"></script>
+</body>
+</html>
