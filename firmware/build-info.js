@@ -1,1 +1,1 @@
-window.BUILD_INFO = {"sha": "d5f5fc4", "message": "add _headers", "time": "2026-11-22 15:44 UTC"};
+window.BUILD_INFO = {"sha": "e96d56d", "message": "delete debug logging", "time": "2026-11-23 01:12 UTC"};
